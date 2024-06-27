@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý công việc</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.7/main.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.7/main.min.css" rel="stylesheet">
+    
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.7/main.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.7/main.min.js"></script>
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.14/index.global.min.js'></script>
+</head>
+<body class="container d-flex justify-content-center align-items-center p-3" style="min-height: 100vh;">
+    <div class="card shadow-sm p-4 mt-4 mb-4" style="max-width: 800px; width: 100%;">
+        <div id="calendar"></div>
+    </div>
+
+    <!-- Modal for task form -->
+    <div class="modal fade" id="taskModal" tabindex="-1" aria-labelledby="taskModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="taskModalLabel">Thêm Công Việc</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form method="post" id="todoForm" class="row g-2">
+                        <div class="col-12">
+                            <label for="task" class="form-label">Công Việc</label>
+                            <input type="text" id="task" name="task" class="form-control" placeholder="Nhập công việc" required>
+                            <div class="invalid-feedback" id="taskError"></div>
+                        </div>
+                        <div class="col-12">
+                            <label for="time" class="form-label">Thời Gian</label>
+                            <input type="time" id="time" name="time" class="form-control" required>
+                        </div>
+                        <div class="col-12">
+                            <label for="date" class="form-label">Ngày Tháng</label>
+                            <input type="date" id="date" name="date" class="form-control" required>
+                        </div>
+                        <div class="col-12">
+                            <label for="prioritize" class="form-label">Mức Độ Ưu Tiên</label>
+                            <select id="prioritize" name="prioritize" class="form-select" required>
+                                <option value="" disabled selected>Chọn mức độ ưu tiên</option>
+                                <option value="Cao">Cao</option>
+                                <option value="Trung Bình">Trung Bình</option>
+                                <option value="Thấp">Thấp</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label for="desc" class="form-label">Mô Tả</label>
+                            <input type="text" id="desc" name="desc" class="form-control" placeholder="Nhập mô tả">
+                            <div class="invalid-feedback" id="descError"></div>
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-primary w-100">Thêm</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            function sanitizeInput(input) {
+                return input ? input.trim() : '';
+            }
+
+            function validateTask(task) {
+                const specialCharPattern = /[!@#$%^&*(),.?":{}|<>]/g;
+                if (task.length > 30) {
+                    return "Công việc không được dài quá 30 ký tự.";
+                }
+                if (specialCharPattern.test(task)) {
+                    return "Công việc không được chứa ký tự đặc biệt.";
+                }
+                return null;
+            }
+
+            function validateDesc(desc) {
+                if (desc.length > 80) {
+                    return "Mô tả không được dài quá 80 ký tự.";
+                }
+                return null;
+            }
+
+            function formatTask(task) {
+                return `${sanitizeInput(task.task)} - ${sanitizeInput(task.time)} - ${sanitizeInput(task.date)} - ${sanitizeInput(task.prioritize)} - ${sanitizeInput(task.desc)}`;
+            }
+
+            function addTaskToList(task) {
+                var calendar = $('#calendar').get(0).fullCalendar;
+
+                // Tạo đối tượng sự kiện FullCalendar
+                var event = {
+                    title: task.task,
+                    start: task.date + 'T' + task.time,
+                    description: task.desc,
+                    prioritize: task.prioritize,
+                    id: task.id,
+                };
+
+                // Thêm sự kiện vào FullCalendar
+                calendar.addEvent(event);
+            }
+
+            function loadTasks() {
+                $.ajax({
+                    url: 'http://localhost:3000/mains',
+                    type: 'GET',
+                    dataType: "json",
+                    success: function(response) {
+                        var calendar = $('#calendar').get(0).fullCalendar;
+                        response.forEach(function(task) {
+                            addTaskToList(task);
+                        });
+                        calendar.render(); // Render lại lịch sau khi thêm các sự kiện
+                    },
+                    error: function(xhr, status, error) {
+                        console.log(xhr.responseText);
+                    }
+                });
+            }
+
+            function resetForm() {
+                $('#todoForm')[0].reset();
+                $('#todoForm').off('submit').on('submit', addNewTask);
+            }
+
+            function addNewTask(e) {
+                e.preventDefault();
+                var task = sanitizeInput($('#task').val());
+                var time = $('#time').val();
+                var date = $('#date').val();
+                var prioritize = $('#prioritize').val();
+                var desc = sanitizeInput($('#desc').val());
+
+                var taskError = validateTask(task);
+                var descError = validateDesc(desc);
+
+                if (taskError || descError) {
+                    $('#task').toggleClass('is-invalid', !!taskError);
+                    $('#taskError').text(taskError || '');
+                    $('#desc').toggleClass('is-invalid', !!descError);
+                    $('#descError').text(descError || '');
+                    return;
+                }
+
+                var data = {
+                    task: task,
+                    time: time,
+                    date: date,
+                    prioritize: prioritize,
+                    desc: desc,
+                };
+
+                $.ajax({
+                    url: 'http://localhost:3000/mains',
+                    type: 'POST',
+                    data: JSON.stringify(data),
+                    contentType: "application/json; charset=utf-8",
+                    dataType: "json",
+                    success: function(response) {
+                        addTaskToList(response);
+                        resetForm();
+                        $('#taskModal').modal('hide');
+                    },
+                    error: function(xhr, status, error) {
+                        console.log(xhr.responseText);
+                    }
+                });
+            }
+
+            $('#todoForm').on('submit', addNewTask);
+
+            // Khởi tạo FullCalendar
+            var calendar = new FullCalendar.Calendar($('#calendar')[0], {
+                initialView: 'dayGridMonth',
+                dateClick: function(info) {
+                    $('#date').val(info.dateStr);
+                    $('#taskModal').modal('show');
+                }
+            });
+
+            calendar.render(); // Render lịch ban đầu
+
+            // Tải danh sách công việc khi trang được tải
+            loadTasks();
+        });
+    </script>
+</body>
+</html>
